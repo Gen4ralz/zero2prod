@@ -1,9 +1,11 @@
 use std::{net::TcpListener, vec};
+use sqlx::{PgConnection, Connection};
+use zero2prod::configuration::get_configuration;
 
 fn spawn_app() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
-    let server = zero2prod::run(listener).expect("Failed to bind address");
+    let server = zero2prod::startup::run(listener).expect("Failed to bind address");
     let _ = tokio::spawn(server);
 
     // We return the application address to the caller!
@@ -32,6 +34,14 @@ async fn health_check_works() {
 async fn subscribe_returns_200() {
     // Arrange
     let app_address = spawn_app();
+    let configuration = get_configuration().expect("Failed to read configuration");
+    let connection_string = configuration.database.connection_string();
+
+    // Connection trait MUST be in scope for invoke
+    // PgConnection::connect - it is not an inherent method of the struct
+    let _connection = PgConnection::connect(&connection_string)
+        .await
+        .expect("Failed to connect to Postgres");
     let client = reqwest::Client::new();
 
     // Act
