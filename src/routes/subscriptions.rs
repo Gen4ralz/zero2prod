@@ -9,26 +9,27 @@ pub struct FormData {
     name: String,
 }
 
+#[tracing::instrument(
+    name = "Adding a new subscriber",
+    skip(form, pool),
+    fields(
+        request_id = %Uuid::new_v4(),
+        subcriber_email = %form.email,
+        subcriber_name = %form.name,
+    )
+)]
+
 pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
-    // improve log by use correlate all logs to the same request
-    let request_id = Uuid::new_v4();
+    match insert_subscriber(&pool, &form).await {
+        Ok(_) => HttpResponse::Ok().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
+}
 
-    // improve log detail by log their email and name
-    log::info!(
-        "request_id {} - Adding '{}' '{}' as a new subscriber",
-        request_id,
-        form.email,
-        form.name
-    );
+#[tracing::instrument(name = "Saving new subscriber into database", skip(form, pool))]
 
-    log::info!(
-        "request_id {} - Saving new subscriber in the database",
-        request_id
-    );
-
-    // 'Result' has two variants: 'OK' and 'Err'
-    // Use match statement to choose what to do based
-    match sqlx::query!(
+pub async fn insert_subscriber(pool: &PgPool, form: &FormData) -> Result<(), sqlx::Error> {
+    sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at)
         VALUES ($1, $2, $3, $4)
@@ -38,22 +39,11 @@ pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> Ht
         form.name,
         Utc::now()
     )
-    .execute(pool.get_ref())
+    .execute(pool)
     .await
-    {
-        Ok(_) => {
-            log::info!("request_id {} - New subscriber has been saved!", request_id);
-            HttpResponse::Ok().finish()
-        }
-        Err(e) => {
-            // use log::error! and {:?} in debug format
-            // will give more detail of error than use println!
-            log::error!(
-                "request_id {} - Failed to execute query: {:?}",
-                request_id,
-                e
-            );
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    .map_err(|e| {
+        tracing::error!("Failed to execute query: {:?}", e);
+        e
+    })?;
+    Ok(())
 }
