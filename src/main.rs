@@ -6,7 +6,6 @@ use zero2prod::startup::run;
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
-
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     // Panic if we can't read configuration

@@ -10,6 +10,22 @@ pub struct FormData {
 }
 
 pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
+    // improve log by use correlate all logs to the same request
+    let request_id = Uuid::new_v4();
+
+    // improve log detail by log their email and name
+    log::info!(
+        "request_id {} - Adding '{}' '{}' as a new subscriber",
+        request_id,
+        form.email,
+        form.name
+    );
+
+    log::info!(
+        "request_id {} - Saving new subscriber in the database",
+        request_id
+    );
+
     // 'Result' has two variants: 'OK' and 'Err'
     // Use match statement to choose what to do based
     match sqlx::query!(
@@ -25,9 +41,18 @@ pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> Ht
     .execute(pool.get_ref())
     .await
     {
-        Ok(_) => HttpResponse::Ok().finish(),
+        Ok(_) => {
+            log::info!("request_id {} - New subscriber has been saved!", request_id);
+            HttpResponse::Ok().finish()
+        }
         Err(e) => {
-            println!("Failed to execute query: {}", e);
+            // use log::error! and {:?} in debug format
+            // will give more detail of error than use println!
+            log::error!(
+                "request_id {} - Failed to execute query: {:?}",
+                request_id,
+                e
+            );
             HttpResponse::InternalServerError().finish()
         }
     }
